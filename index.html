@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Cronoteca — curiosità storiche</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#171310">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Archivio">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500..900&family=Lora:ital,wght@0,400..600;1,400..500&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --paper: #EDE6D6;
+  --paper-2: #E3D9C4;
+  --ink: #2B2620;
+  --ink-soft: #6B5F4E;
+  --brass: #8C7A54;
+  --brass-faint: rgba(140,122,84,0.28);
+  --antichita: #B5622B;
+  --medioevo: #4A5D3A;
+  --rinascimento: #B8912B;
+  --moderna: #33465F;
+  --contemporanea: #8B3A3A;
+}
+
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0; height:100%; background:var(--ink); overscroll-behavior-y:none;}
+body{
+  font-family:'Lora', serif;
+  color:var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:fixed; top:0; left:0; right:0; z-index:30;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 18px 10px;
+  background:linear-gradient(to bottom, rgba(20,17,13,0.55), rgba(20,17,13,0));
+  pointer-events:none;
+}
+.brand{
+  display:flex; align-items:center; gap:8px;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:11px; letter-spacing:0.12em; text-transform:uppercase;
+  color:#EDE6D6;
+}
+.brand svg{width:15px; height:15px; opacity:0.9;}
+.counter{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:11px; letter-spacing:0.06em;
+  color:#EDE6D6;
+  background:rgba(20,17,13,0.35);
+  border:1px solid rgba(237,230,214,0.25);
+  border-radius:20px;
+  padding:5px 11px;
+  display:flex; align-items:center; gap:6px;
+}
+.counter .dot-heart{color:#e0a3a3; font-size:12px; line-height:1;}
+
+/* ---------- progress track (trascinabile per scorrere velocemente) ---------- */
+.progress-track{
+  position:fixed; right:0; top:12%; bottom:12%;
+  width:34px; z-index:30;
+  display:flex; justify-content:center;
+  touch-action:none; cursor:grab;
+}
+.progress-track::before{
+  content:''; position:absolute; top:0; bottom:0; left:50%; transform:translateX(-50%);
+  width:3px; border-radius:3px;
+  background:rgba(237,230,214,0.18);
+}
+.progress-thumb{
+  position:absolute; left:50%; transform:translateX(-50%); top:0;
+  width:8px; height:32px; border-radius:5px;
+  background:#8C7A54;
+  box-shadow:0 0 8px rgba(0,0,0,0.4);
+  transition:background 0.3s ease, width 0.15s ease, height 0.15s ease;
+  pointer-events:none;
+}
+.progress-track.dragging .progress-thumb{
+  width:13px; height:42px;
+  box-shadow:0 0 14px rgba(0,0,0,0.55);
+}
+.progress-track.dragging{ cursor:grabbing; }
+
+/* ---------- feed ---------- */
+.feed{
+  height:100vh; height:100dvh;
+  overflow-y:scroll; scroll-snap-type:y mandatory;
+  background:var(--ink);
+}
+.slide{
+  height:100vh; height:100dvh;
+  scroll-snap-align:start; scroll-snap-stop:always;
+  display:flex; align-items:center; justify-content:center;
+  position:relative;
+  padding:0 22px;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(255,255,255,0.05), transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(255,255,255,0.04), transparent 45%),
+    #171310;
+}
+
+/* ---------- card ---------- */
+.card{
+  position:relative;
+  width:100%; max-width:400px;
+  background:
+    radial-gradient(rgba(0,0,0,0.05) 0.6px, transparent 0.6px) 0 0/7px 7px,
+    var(--paper);
+  border:1px solid var(--brass-faint);
+  border-radius:3px;
+  box-shadow: 0 18px 40px -12px rgba(0,0,0,0.55), 0 2px 0 rgba(0,0,0,0.15) inset;
+  padding:34px 26px 24px;
+  transform: translateY(6px);
+  opacity:0;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.slide.in-view .card{ opacity:1; transform:translateY(0); }
+
+/* punch holes */
+.card::before, .card::after{
+  content:''; position:absolute; top:14px; width:9px; height:9px;
+  border-radius:50%;
+  background:#171310;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+}
+.card::before{ left:24px; }
+.card::after{ left:44px; }
+
+/* era tab */
+.tab{
+  position:absolute; right:-1px; top:var(--tabtop, 56px);
+  writing-mode:vertical-rl; text-orientation:mixed;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:10px; letter-spacing:0.14em; text-transform:uppercase;
+  color:#fff;
+  padding:10px 5px 12px;
+  border-radius:0 4px 4px 0;
+  box-shadow: 2px 3px 8px rgba(0,0,0,0.35);
+}
+
+.head-row{
+  display:flex; align-items:baseline; justify-content:space-between;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:11px; letter-spacing:0.05em;
+  color:var(--ink-soft);
+  padding-bottom:10px; margin-bottom:16px;
+  border-bottom:1px dashed var(--brass-faint);
+}
+.head-row .catno{ font-weight:600; }
+.head-row .era-label{ color:var(--ink-soft); }
+
+.wiki-source{
+  display:inline-flex; align-items:center; gap:4px;
+  font-family:'IBM Plex Mono', monospace; font-size:9.5px;
+  color:var(--ink-soft); opacity:0.75;
+  margin-top:8px;
+}
+.wiki-source svg{ width:10px; height:10px; }
+
+.title{
+  font-family:'Fraunces', serif;
+  font-weight:650;
+  font-size:26px;
+  line-height:1.18;
+  margin:0 0 14px;
+  color:var(--ink);
+}
+
+.body-text{
+  font-size:15.5px;
+  line-height:1.62;
+  color:#3a332a;
+  margin:0;
+}
+
+.foot-row{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-top:22px; padding-top:14px;
+  border-top:1px dashed var(--brass-faint);
+}
+.year{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:11.5px; color:var(--ink-soft); letter-spacing:0.03em;
+}
+.actions{ display:flex; gap:10px; }
+.actionbtn{
+  border:1px solid var(--brass-faint);
+  background:rgba(255,255,255,0.35);
+  border-radius:20px;
+  padding:6px 12px;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:11px;
+  color:var(--ink-soft);
+  display:flex; align-items:center; gap:6px;
+  cursor:pointer;
+  transition:background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+}
+.actionbtn:active{ transform:scale(0.94); }
+.actionbtn.save.active{
+  background:#8B3A3A; color:#fff; border-color:#8B3A3A;
+}
+.actionbtn svg{ width:13px; height:13px; }
+
+/* hint */
+.hint{
+  position:absolute; bottom:26px; left:0; right:0;
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  color:rgba(237,230,214,0.6);
+  font-family:'IBM Plex Mono', monospace;
+  font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase;
+  animation: floaty 1.8s ease-in-out infinite;
+  pointer-events:none;
+}
+@keyframes floaty{
+  0%,100%{ transform:translateY(0); opacity:0.55; }
+  50%{ transform:translateY(-6px); opacity:0.95; }
+}
+
+/* toast */
+.toast{
+  position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(10px);
+  background:#EDE6D6; color:#2B2620;
+  font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:0.03em;
+  padding:9px 16px; border-radius:20px; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  opacity:0; transition:opacity 0.25s, transform 0.25s;
+  z-index:50; pointer-events:none;
+}
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg>
+    Cronoteca
+  </div>
+  <div class="counter"><span class="dot-heart">♥</span><span id="counterText">0/0 raccolte</span></div>
+</div>
+
+<div class="progress-track" id="progressTrack">
+  <div class="progress-thumb" id="progressThumb"></div>
+</div>
+
+<div class="feed" id="feed"></div>
+
+<div class="toast" id="toast">Copiato negli appunti</div>
+
+<script>
+const ERA_COLORS = {
+  antichita: '#B5622B',
+  medioevo: '#4A5D3A',
+  rinascimento: '#B8912B',
+  moderna: '#33465F',
+  contemporanea: '#8B3A3A'
+};
+const ERA_LABELS = {
+  antichita: 'Antichità',
+  medioevo: 'Medioevo',
+  rinascimento: 'Rinascimento',
+  moderna: 'Età moderna',
+  contemporanea: 'Età contemporanea'
+};
+// staggered tab offsets per era, to mimic a real hanging-folder drawer
+const ERA_TABTOP = {
+  antichita: 40,
+  medioevo: 110,
+  rinascimento: 180,
+  moderna: 250,
+  contemporanea: 320
+};
+
+const SEED_FACTS = [
+  {era:'antichita', year:'I sec. d.C.', title:'Pecunia non olet', text:"L'imperatore Vespasiano tassò l'urina raccolta dagli orinatoi pubblici di Roma, che veniva rivenduta a conciatori e lavandai. Quando il figlio Tito storse il naso davanti a quei guadagni, il padre gli fece annusare le monete e rispose che il denaro non ha odore."},
+  {era:'antichita', year:'III sec. a.C.', title:'I libri requisiti in porto', text:"Ad Alessandria d'Egitto, le navi che attraccavano nel porto venivano controllate: se a bordo c'erano rotoli o manoscritti, questi venivano confiscati, copiati per la biblioteca reale e restituiti solo in copia, mentre l'originale restava agli archivi."},
+  {era:'antichita', year:'I sec. a.C.', title:'Più vicina a noi che alle piramidi', text:"Cleopatra visse intorno al 30 a.C., circa 2500 anni dopo la costruzione della Grande Piramide di Giza. Dal suo tempo allo sbarco sulla Luna del 1969 sono invece passati meno di 2000 anni: è quindi cronologicamente più vicina a noi che alle piramidi."},
+  {era:'antichita', year:'VII sec. a.C.', title:"L'educazione degli spartani", text:"A Sparta i ragazzi venivano sottratti alla famiglia a 7 anni per l'agoge, un addestramento collettivo fondato su disciplina estrema, resistenza fisica e vita in comune, pensato per formare soldati prima ancora che individui."},
+  {era:'antichita', year:'I sec. d.C.', title:'Il velario del Colosseo', text:"Il Colosseo poteva ospitare fino a 50.000-80.000 spettatori e disponeva di un enorme telone, il velarium, azionato da marinai della flotta romana per proteggere il pubblico dal sole."},
+  {era:'antichita', year:'V-IV millennio a.C.', title:'Riscaldamento a pavimento', text:"I romani svilupparono l'ipocausto, un sistema di riscaldamento a pavimento che faceva circolare aria calda sotto le terme, un'idea che riapparirà in Europa solo molti secoli dopo."},
+  {era:'antichita', year:'XXVI sec. a.C.', title:'Operai, non schiavi', text:"Gli scavi del villaggio degli operai di Giza suggeriscono che le piramidi furono costruite in gran parte da lavoratori liberi e pagati, ben nutriti a carne e birra, smentendo il mito degli schiavi frustati."},
+  {era:'antichita', year:'XVIII sec. a.C.', title:'Occhio per occhio', text:"Il Codice di Hammurabi, inciso su una stele in Babilonia intorno al 1750 a.C., è uno dei più antichi testi legali giunti fino a noi e stabiliva pene proporzionate al danno subito."},
+  {era:'antichita', year:'776 a.C.', title:'Olimpiadi solo per uomini', text:"Alle antiche Olimpiadi greche le donne sposate non potevano nemmeno assistere alle gare, pena severe punizioni: solo le donne nubili erano ammesse come spettatrici in alcune città."},
+  {era:'antichita', year:'I sec. d.C.', title:'La dieta dei gladiatori', text:"I gladiatori romani seguivano spesso una dieta a base di orzo e legumi, tanto da essere soprannominati hordearii, mangiatori d'orzo: un regime pensato per accumulare grasso protettivo sopra i muscoli."},
+  {era:'antichita', year:'III millennio a.C.', title:'Il gioco più antico', text:"Il senet, ritrovato in tombe egizie di oltre 5000 anni fa, è uno dei giochi da tavolo più antichi conosciuti: veniva sepolto con i defunti come simbolo del viaggio nell'aldilà."},
+  {era:'antichita', year:'I sec. a.C.', title:'Cesare e i pirati', text:"Da giovane, Giulio Cesare fu rapito dai pirati e tenuto in ostaggio. Una volta liberato dietro riscatto, tornò con una flotta, li catturò e li fece giustiziare, come aveva promesso loro per scherzo durante la prigionia."},
+  {era:'antichita', year:'II sec. a.C.', title:'La nascita della pergamena', text:"Per limitare la crescita della rivale biblioteca di Pergamo, l'Egitto vietò l'esportazione di papiro. Pergamo rispose perfezionando un supporto in pelle animale, la pergamena, che prende il nome proprio dalla città."},
+  {era:'antichita', year:'I sec. d.C.', title:'Il vero significato di vomitorium', text:"Nei teatri e anfiteatri romani i vomitoria non erano luoghi per vomitare, come vuole un mito diffuso, ma i passaggi attraverso cui la folla veniva rapidamente riversata dentro e fuori dagli spalti."},
+  {era:'antichita', year:'III millennio a.C.', title:'Un pigmento sintetico antichissimo', text:"Il blu egizio, ottenuto da sabbia, rame e calce riscaldati, è considerato uno dei primi pigmenti sintetici della storia, creato migliaia di anni prima della nascita della chimica moderna."},
+  {era:'antichita', year:'I sec. a.C.', title:'La posta di stato romana', text:"Augusto istituì il cursus publicus, un sistema di stazioni di cambio per cavalli e messaggeri che permetteva il trasporto rapido di comunicazioni ufficiali lungo tutto l'impero."},
+  {era:'antichita', year:'490 a.C.', title:'La corsa che uccise', text:"La leggenda della maratona nasce dal messaggero Fidippide, che secondo la tradizione corse da Maratona ad Atene per annunciare la vittoria sui persiani, morendo per lo sforzo subito dopo."},
+  {era:'antichita', year:'46 a.C.', title:"L'anno più lungo della storia", text:"Per far coincidere il nuovo calendario giuliano con le stagioni, Giulio Cesare fece durare il 46 a.C. ben 445 giorni: un periodo ricordato dagli storici come l'anno della confusione."},
+  {era:'antichita', year:'V sec. a.C.', title:'Le strade regie persiane', text:"L'impero achemenide costruì un sistema di strade con stazioni di cambio cavalli che permetteva ai messaggeri reali di percorrere oltre 2000 km in circa una settimana."},
+  {era:'antichita', year:'IV sec. a.C.', title:"L'oracolo che confondeva apposta", text:"L'oracolo di Delfi era famoso per dare responsi volutamente ambigui: al re Creso fu detto che, attaccando i persiani, avrebbe distrutto un grande impero. Fu il suo."},
+
+  {era:'medioevo', year:'XIV sec.', title:'Quaranta giorni di attesa', text:"Durante le epidemie di peste, Venezia obbligava le navi in arrivo a restare ancorate al largo per 40 giorni prima di sbarcare merci e passeggeri. Da quel periodo, in veneziano quaranta giorni, nasce la parola quarantena."},
+  {era:'medioevo', year:'XIV sec.', title:'Una superstizione pericolosa', text:"In alcune zone d'Europa i gatti, specialmente quelli neri, venivano associati alla stregoneria e uccisi per paura. Alcuni storici ipotizzano che la conseguente crescita della popolazione di ratti possa aver favorito la diffusione della peste, anche se il nesso diretto resta discusso."},
+  {era:'medioevo', year:'XV sec.', title:"Un'armatura più leggera del previsto", text:"Un'armatura completa da torneo pesava in media 20-30 kg, distribuiti su tutto il corpo grazie a giunture snodate. Un cavaliere allenato poteva correre, montare a cavallo senza aiuto e persino fare capriole."},
+  {era:'medioevo', year:'1088', title:"L'università più antica d'Europa", text:"L'Università di Bologna, fondata nel 1088, è considerata la più antica università del mondo occidentale ancora attiva. Nacque come libera associazione di studenti, che assumevano essi stessi i propri docenti."},
+  {era:'medioevo', year:'X sec.', title:"L'Europa prima di Colombo", text:"I vichinghi raggiunsero le coste del Nord America, nell'attuale Terranova, circa 500 anni prima di Colombo, come testimoniano i resti dell'insediamento di L'Anse aux Meadows."},
+  {era:'medioevo', year:'Medioevo', title:'Libri incatenati', text:"Nelle biblioteche monastiche medievali i manoscritti erano così preziosi da essere spesso incatenati agli scaffali, per evitare che venissero rubati o smarriti."},
+  {era:'medioevo', year:'IX sec.', title:'Un imperatore che non sapeva scrivere bene', text:"Carlo Magno, pur promuovendo scuole e cultura in tutto il suo impero, secondo il suo biografo Eginardo non riuscì mai, da adulto, a imparare a scrivere in modo fluido."},
+  {era:'medioevo', year:'Medioevo', title:'Tornei vietati dalla Chiesa', text:"I tornei cavallereschi causavano così tante morti tra i nobili che in diversi periodi la Chiesa ne proibì lo svolgimento, arrivando persino a negare sepoltura cristiana a chi moriva in combattimento."},
+  {era:'medioevo', year:'1152', title:'Un matrimonio che cambiò la mappa', text:"Il matrimonio tra Enrico II d'Inghilterra ed Eleonora d'Aquitania unì territori tali da rendere il re inglese padrone di più terra in Francia di quanta ne possedesse il re francese stesso."},
+  {era:'medioevo', year:'1347-1351', title:'La peste nera', text:"La peste nera del 1347-1351 uccise probabilmente tra un terzo e la metà della popolazione europea in pochi anni, trasformando profondamente economia e società del continente."},
+  {era:'medioevo', year:'XI-XIII sec.', title:'Il lascito delle Crociate', text:"Le Crociate, oltre ai conflitti, favorirono in Europa la circolazione di spezie, zucchero di canna e nuove tecniche agricole e commerciali provenienti dal mondo islamico."},
+  {era:'medioevo', year:'X sec.', title:'Un visir diventato regina', text:"Gli scacchi arrivarono in Europa dal mondo arabo-persiano. Nel passaggio culturale, il pezzo del visir persiano si trasformò progressivamente nella Regina, il pezzo più potente della scacchiera occidentale."},
+  {era:'medioevo', year:'Rinascimento', title:'Un nome nato per disprezzo', text:"Il termine medioevo fu coniato secoli più tardi dagli umanisti rinascimentali per descrivere, con una certa sufficienza, il periodo intermedio tra l'antichità classica e la loro epoca."},
+  {era:'medioevo', year:'VI sec.', title:'Il segreto della seta', text:"Secondo la tradizione, due monaci bizantini contrabbandarono uova di baco da seta dalla Cina nascoste in canne di bambù, permettendo la nascita della sericoltura in Europa."},
+  {era:'medioevo', year:'1215', title:'Una carta nata da una ribellione', text:"La Magna Carta del 1215 non nacque da un ideale astratto di libertà, ma da una ribellione dei baroni inglesi contro Re Giovanni, e tutelava soprattutto i privilegi della nobiltà."},
+  {era:'medioevo', year:'XII-XV sec.', title:'Cattedrali costruite in generazioni', text:"Le grandi cattedrali gotiche come Notre-Dame impiegarono spesso oltre un secolo per essere completate, coinvolgendo generazioni successive di architetti e scalpellini."},
+  {era:'medioevo', year:'XIII sec.', title:'La posta a staffetta di Gengis Khan', text:"Gengis Khan istituì lo Yam, un sistema di stazioni di posta a cavallo che permetteva ai messaggeri di attraversare l'intero impero mongolo a velocità record per l'epoca."},
+  {era:'medioevo', year:'XIV sec.', title:"Un'idea nata prima di Venezia", text:"L'isolamento delle navi in arrivo per prevenire il contagio era già praticato a Ragusa, l'attuale Dubrovnik, con un periodo di 30 giorni, qualche decennio prima della quarantena veneziana di 40."},
+  {era:'medioevo', year:'Medioevo', title:'Donne a capo di botteghe', text:"In alcune città medievali inglesi, le donne sposate potevano gestire attività commerciali in proprio nome grazie allo status giuridico di femme sole, indipendente da quello del marito."},
+  {era:'medioevo', year:'793', title:'Il terrore dal mare', text:"Il saccheggio del monastero di Lindisfarne nel 793 è tradizionalmente considerato l'inizio dell'età vichinga in Europa, l'evento che diffuse il terrore per i predoni scandinavi."},
+  {era:'medioevo', year:'1054', title:'Uno scisma che dura ancora', text:"Nel 1054 la Chiesa cristiana si divise formalmente tra Chiesa cattolica romana e Chiesa ortodossa d'Oriente, una frattura religiosa e politica mai del tutto ricomposta."},
+
+  {era:'rinascimento', year:'1455 circa', title:'Una Bibbia venduta come manoscritto', text:"Gutenberg stampò la sua celebre Bibbia intorno al 1455, ma inizialmente cercò di spacciarla per un manoscritto fatto a mano, ritenuto più pregiato agli occhi degli acquirenti dell'epoca."},
+  {era:'rinascimento', year:'XV-XVI sec.', title:'Una scrittura allo specchio', text:"Leonardo da Vinci, mancino, riempì i suoi taccuini di annotazioni scritte da destra verso sinistra, leggibili solo riflesse in uno specchio, forse per comodità o per proteggere le sue idee."},
+  {era:'rinascimento', year:'1508-1512', title:'In piedi, non sdraiato', text:"Contrariamente al mito diffuso, Michelangelo non dipinse il soffitto della Cappella Sistina sdraiato sulla schiena, ma in piedi su un'impalcatura di sua progettazione, con la testa reclinata all'indietro."},
+  {era:'rinascimento', year:'XV-XVI sec.', title:'Uno scambio silenzioso', text:"Dopo i viaggi di Colombo, l'Europa vide la prima grande epidemia documentata di sifilide. Gli storici discutono ancora se la malattia arrivasse dalle Americhe o fosse già presente in forme meno virulente."},
+  {era:'rinascimento', year:'XV sec.', title:'Il monumento mai fuso', text:"Leonardo da Vinci progettò per Ludovico il Moro il più grande monumento equestre mai concepito fino ad allora: il modello in argilla fu distrutto dai soldati francesi prima che potesse essere fuso in bronzo."},
+  {era:'rinascimento', year:'1543', title:'Un libro pubblicato in punto di morte', text:"Copernico attese quasi fino alla morte per pubblicare la sua teoria eliocentrica, temendo le reazioni della Chiesa: ricevette la prima copia stampata del suo libro, secondo la tradizione, sul letto di morte."},
+  {era:'rinascimento', year:'XV sec.', title:'Mecenati per interesse', text:"I Medici finanziarono artisti, architetti e scienziati non solo per amore della cultura, ma anche come strumento per consolidare il proprio potere politico ed economico su Firenze."},
+  {era:'rinascimento', year:'1513', title:'Un trattato scritto in esilio', text:"Machiavelli scrisse Il Principe mentre era allontanato dalla vita politica fiorentina, nella speranza, mai realizzata, di essere richiamato al servizio dei Medici."},
+  {era:'rinascimento', year:'1520', title:'Nato e morto lo stesso giorno', text:"Secondo la tradizione, Raffaello Sanzio morì a soli 37 anni proprio il giorno del suo compleanno, il 6 aprile 1520, un dettaglio che alimentò da subito il mito dell'artista."},
+  {era:'rinascimento', year:'XVI sec.', title:'Bellezza a caro prezzo', text:"Le donne di ceto elevato del Rinascimento usavano spesso un cerone a base di biacca di piombo per schiarire la pelle, con gravi conseguenze sulla salute nel lungo periodo."},
+  {era:'rinascimento', year:'1499-1502', title:"Un nome dato per errore di viaggio", text:"Amerigo Vespucci, da cui prende il nome il continente americano, non guidò mai ufficialmente una spedizione come comandante, ma vi partecipò come navigatore e ne scrisse resoconti molto diffusi."},
+  {era:'rinascimento', year:'1571', title:'Uno scrittore in battaglia', text:"Alla battaglia navale di Lepanto del 1571 partecipò anche il giovane Miguel de Cervantes, futuro autore del Don Chisciotte, che vi perse l'uso della mano sinistra."},
+  {era:'rinascimento', year:'1436', title:'Una cupola senza armature', text:"La cupola del Duomo di Firenze, progettata da Filippo Brunelleschi, fu costruita senza le tradizionali armature di legno interne, una soluzione ingegneristica considerata rivoluzionaria per l'epoca."},
+  {era:'rinascimento', year:'XVI sec.', title:'Un naso di metallo', text:"L'astronomo Tycho Brahe perse parte del naso in un duello da giovane e ne portò per il resto della vita uno artificiale, probabilmente in una lega di rame e argento."},
+  {era:'rinascimento', year:'XV-XVI sec.', title:'La prima donna del mondo', text:"Isabella d'Este fu una delle mecenati e collezioniste d'arte più influenti del Rinascimento, tanto da essere soprannominata dai contemporanei la prima donna del mondo."},
+  {era:'rinascimento', year:'XV sec.', title:'Ossessionato dalla prospettiva', text:"Secondo Giorgio Vasari, il pittore Paolo Uccello era così ossessionato dallo studio della prospettiva da passare le notti a disegnare punti di fuga, con grande disappunto della moglie."},
+  {era:'rinascimento', year:'1492', title:'Il nome sbagliato di un continente', text:"Colombo morì convinto di aver raggiunto le Indie orientali, errore che diede origine al nome improprio Indie occidentali con cui per secoli si indicarono le Americhe."},
+  {era:'rinascimento', year:'1494', title:'Il mondo diviso in due', text:"Con il trattato di Tordesillas del 1494, papa e sovrani di Spagna e Portogallo si spartirono su una mappa ancora incompleta i futuri territori extraeuropei, tracciando una linea immaginaria sull'Atlantico."},
+  {era:'rinascimento', year:'XVI sec.', title:"Un'invenzione che cambiò la guerra", text:"La diffusione delle armi da fuoco portatili nel Rinascimento rese progressivamente obsolete le pesanti armature dei cavalieri medievali, cambiando per sempre il volto dei campi di battaglia."},
+  {era:'rinascimento', year:'1508', title:'Una committenza scomoda', text:"Michelangelo accettò la commissione della Cappella Sistina con riluttanza, ritenendosi principalmente uno scultore e non un pittore: il progetto durò comunque circa quattro anni."},
+  {era:'rinascimento', year:'XVI sec.', title:'Il primo atlante moderno', text:"Nel 1570 il cartografo fiammingo Abraham Ortelius pubblicò il Theatrum Orbis Terrarum, considerato il primo vero atlante moderno con mappe uniformi rilegate insieme."},
+
+  {era:'moderna', year:'1682-1789', title:'Una reggia per controllare i nobili', text:"Luigi XIV fece costruire Versailles anche come strumento politico, per obbligare l'aristocrazia francese a vivere a corte sotto il suo controllo, lontano dai propri feudi di provincia."},
+  {era:'moderna', year:'XVIII sec.', title:"Un'imperatrice mai citata correttamente", text:"Maria Antonietta non pronunciò probabilmente mai la celebre frase che mangino brioche: la citazione le fu attribuita solo decenni dopo la sua morte, e circolava già prima riferita ad altre nobildonne."},
+  {era:'moderna', year:'1789', title:'Una fortezza quasi vuota', text:"Al momento del celebre assalto del 14 luglio 1789, la Bastiglia di Parigi custodiva soltanto sette prigionieri, ben lontana dall'immagine di prigione politica gremita tramandata dalla propaganda rivoluzionaria."},
+  {era:'moderna', year:'1807', title:"L'imperatore assediato dai conigli", text:"Il maresciallo Berthier organizzò per Napoleone una battuta di caccia ai conigli, acquistati d'allevamento anziché selvatici. Abituati alla presenza umana, gli animali caricarono in massa l'imperatore scambiandolo per chi portava il cibo."},
+  {era:'moderna', year:'1752', title:'Undici giorni scomparsi', text:"Quando la Gran Bretagna adottò il calendario gregoriano nel settembre 1752, al 2 settembre seguì direttamente il 14: alcuni cittadini, secondo la tradizione popolare, protestarono convinti che qualcuno avesse loro rubato quei giorni di vita."},
+  {era:'moderna', year:'1889-1909', title:'Salvata dalla radio', text:"La Torre Eiffel fu costruita per l'Esposizione Universale del 1889 con un permesso di soli 20 anni. Fu risparmiata dalla demolizione perché utile come supporto per antenne di telegrafia e radio militare."},
+  {era:'moderna', year:'1793', title:'Un giorno diviso in dieci', text:"Durante la Rivoluzione Francese fu introdotto per alcuni anni un calendario decimale, con settimane di 10 giorni e giornate divise in 10 ore da 100 minuti, poi abbandonato per l'impraticabilità quotidiana."},
+  {era:'moderna', year:'XVIII sec.', title:"Un'invenzione nata dal carbone", text:"La rivoluzione industriale iniziò in Gran Bretagna anche grazie all'abbondanza di carbone a basso costo e alla disponibilità di capitali privati pronti a essere investiti in nuove macchine."},
+  {era:'moderna', year:'1752', title:'Un aquilone e una chiave', text:"Il celebre esperimento di Benjamin Franklin con aquilone e chiave durante un temporale, usato per studiare l'elettricità atmosferica, ci è giunto in una versione probabilmente semplificata rispetto ai fatti reali."},
+  {era:'moderna', year:'1756-1763', title:'Il primo conflitto globale', text:"La guerra dei sette anni, combattuta su più continenti tra le grandi potenze europee e le loro colonie, è considerata da alcuni storici il primo vero conflitto su scala mondiale."},
+  {era:'moderna', year:'XVIII sec.', title:"Un tè più sicuro dell'acqua", text:"Il tè divenne centrale nella cultura inglese anche perché, essendo preparato con acqua bollita, risultava spesso più sicuro da bere dell'acqua corrente non depurata dell'epoca."},
+  {era:'moderna', year:'XVIII sec.', title:'Un esercito privato', text:"La Compagnia britannica delle Indie Orientali arrivò a disporre di un proprio esercito privato più numeroso di quello di molti stati sovrani europei del tempo."},
+  {era:'moderna', year:'XVI sec.', title:'La forchetta, un capriccio raffinato', text:"Caterina de' Medici contribuì a diffondere in Francia l'uso della forchetta, inizialmente considerata più un vezzo aristocratico che uno strumento da tavola necessario."},
+  {era:'moderna', year:'1665-1666', title:'Scoperte nate dalla quarantena', text:"Isaac Newton sviluppò gran parte delle sue intuizioni sulla gravità durante un lungo periodo di isolamento forzato nella tenuta di famiglia, quando l'università di Cambridge chiuse per un'epidemia di peste."},
+  {era:'moderna', year:'XVI-XIX sec.', title:'Un commercio a tre punte', text:"Il commercio triangolare atlantico collegava Europa, Africa e Americhe, e fu alla base della tratta transatlantica degli esseri umani ridotti in schiavitù per oltre tre secoli."},
+  {era:'moderna', year:'1768-1779', title:'Le coste disegnate con precisione', text:"James Cook mappò con straordinaria accuratezza per l'epoca ampie porzioni delle coste del Pacifico, contribuendo enormemente alla cartografia mondiale del XVIII secolo."},
+  {era:'moderna', year:'1636-1637', title:'Un bulbo più caro di una casa', text:"Durante la cosiddetta tulipomania nei Paesi Bassi, il prezzo di alcuni bulbi di tulipano rari superò quello di case signorili, prima di un crollo improvviso del mercato nel 1637."},
+  {era:'moderna', year:'1792', title:'Un nome legato a un dibattito', text:"La ghigliottina fu proposta come metodo di esecuzione più rapido e uniforme rispetto ai metodi precedenti, e prese il nome dal medico Joseph-Ignace Guillotin, che ne sostenne l'adozione in parlamento."},
+  {era:'moderna', year:'1650', title:'Il primo vero quotidiano', text:"Il titolo di primo giornale quotidiano regolare d'Europa spetta all'Einkommende Zeitungen, pubblicato a Lipsia a partire dal 1650."},
+  {era:'moderna', year:'1791-1804', title:'La prima repubblica di ex schiavi', text:"La rivoluzione haitiana portò nel 1804 alla nascita della prima repubblica indipendente della storia moderna guidata da persone precedentemente ridotte in schiavitù."},
+
+  {era:'contemporanea', year:'1930', title:'Un primato durato 41 anni', text:"La Torre Eiffel rimase l'edificio più alto del mondo per soli 41 anni, prima di essere superata dal Chrysler Building di New York nel 1930."},
+  {era:'contemporanea', year:'1914', title:'La tregua di Natale', text:"Durante la Prima Guerra Mondiale, nel dicembre 1914, soldati nemici in alcuni tratti del fronte scesero spontaneamente nella terra di nessuno per scambiarsi doni e giocare a pallone insieme."},
+  {era:'contemporanea', year:'1912', title:'Scialuppe insufficienti', text:"Il Titanic trasportava scialuppe di salvataggio sufficienti per meno della metà delle persone a bordo, pur rispettando pienamente le normative marittime in vigore all'epoca."},
+  {era:'contemporanea', year:'1928', title:'Una scoperta quasi casuale', text:"Alexander Fleming scoprì la penicillina nel 1928 quasi per caso, notando che una muffa aveva contaminato una delle sue colture batteriche impedendone la crescita."},
+  {era:'contemporanea', year:'1903', title:'Dodici secondi che cambiarono tutto', text:"Il primo volo a motore dei fratelli Wright nel 1903 durò appena dodici secondi e percorse una distanza inferiore alla lunghezza di un moderno aereo di linea."},
+  {era:'contemporanea', year:'Guerra Fredda', title:'Arsenali capaci di distruggere il mondo', text:"Durante la Guerra Fredda, Stati Uniti e Unione Sovietica accumularono migliaia di testate nucleari, arrivando a un potenziale distruttivo sufficiente a colpire il pianeta più volte."},
+  {era:'contemporanea', year:'Seconda guerra mondiale', title:'Il Monopoly delle spie', text:"I servizi segreti britannici fecero produrre versioni speciali del gioco Monopoly con mappe, bussole e denaro reale nascosti dentro, inviate ai prigionieri di guerra alleati per aiutarne la fuga."},
+  {era:'contemporanea', year:'1955', title:'Un simbolo, non un inizio', text:"Rosa Parks non fu la prima donna afroamericana arrestata per essersi rifiutata di cedere il posto su un autobus, ma la sua vicenda del 1955 divenne il simbolo del movimento per i diritti civili statunitense."},
+  {era:'contemporanea', year:'1945', title:'Ventisette tonnellate di calcolo', text:"L'ENIAC, il primo computer completamente elettronico, pesava circa 27 tonnellate e occupava una stanza intera, pur avendo una potenza di calcolo inferiore a quella di un moderno smartphone."},
+  {era:'contemporanea', year:'1969', title:'Meno potenza di una calcolatrice', text:"Il computer di bordo della missione Apollo 11 disponeva di una potenza di calcolo enormemente inferiore a quella di una moderna calcolatrice tascabile."},
+  {era:'contemporanea', year:'1974', title:"Una guerra finita in ritardo", text:"Alcuni soldati giapponesi rimasero nascosti nella giungla per decenni dopo la fine della Seconda Guerra Mondiale, convinti che il conflitto fosse ancora in corso: l'ultimo si arrese solo nel 1974."},
+  {era:'contemporanea', year:'XIX sec.', title:'Un tonico da farmacia', text:"La Coca-Cola fu inizialmente venduta come tonico medicinale nelle farmacie statunitensi di fine Ottocento, prima di trasformarsi nella bevanda di massa che conosciamo oggi."},
+  {era:'contemporanea', year:'1941', title:'Ispirato dai semi di bardana', text:"L'ingegnere svizzero George de Mestral inventò il velcro osservando come i piccoli ganci dei semi di bardana si attaccassero ai vestiti e al pelo del suo cane durante una passeggiata."},
+  {era:'contemporanea', year:'1992', title:'Il primo SMS della storia', text:"Il 3 dicembre 1992 l'ingegnere Neil Papworth inviò il primo SMS della storia da un computer a un telefono cellulare: il testo diceva semplicemente Merry Christmas."},
+  {era:'contemporanea', year:'1952', title:'La presidenza rifiutata', text:"Nel 1952 ad Albert Einstein fu offerta la carica di presidente dello Stato d'Israele. Einstein rifiutò, dichiarandosi privo dell'attitudine necessaria a trattare con le persone e a esercitare funzioni ufficiali."},
+  {era:'contemporanea', year:'1989', title:'Una caduta annunciata per errore', text:"Il 9 novembre 1989 il portavoce della Germania Est Günter Schabowski, per un fraintendimento in conferenza stampa, lasciò intendere che i confini fossero aperti da subito: la folla si precipitò ai valichi quella stessa notte."},
+  {era:'contemporanea', year:'1993', title:'Un regalo al mondo', text:"Nell'aprile 1993 il CERN di Ginevra rese pubblica e gratuita la tecnologia del World Wide Web, sviluppata da Tim Berners-Lee, rinunciando a qualsiasi royalty e permettendo al web di diffondersi liberamente."},
+  {era:'contemporanea', year:'1992', title:'La prima foto caricata sul web', text:"La prima immagine caricata sul World Wide Web ritraeva le Les Horribles Cernettes, un gruppo musicale scherzoso formato da ricercatrici del CERN, pubblicata da Tim Berners-Lee come esempio pratico."},
+  {era:'contemporanea', year:'Seconda guerra mondiale', title:'Supereroi in tempo di guerra', text:"Il fumetto dei supereroi crebbe rapidamente durante la Seconda Guerra Mondiale anche come strumento di propaganda: già nel 1941 Captain America appariva in copertina mentre colpiva Hitler."},
+  {era:'contemporanea', year:'1990', title:'Un francobollo diventato leggenda', text:"Nel 1990 il servizio postale statunitense distrusse per errore quasi tutti i fogli di un francobollo con Bugs Bunny stampato al contrario, rendendo i pochi esemplari sopravvissuti rarità da collezione."},
+{era:'antichita', year:'IX sec. a.C.', title:'Una città fondata da una regina', text:"Secondo la leggenda, Cartagine fu fondata dalla principessa fenicia Didone, che ottenne dai locali tanta terra quanta ne poteva racchiudere con la pelle di un bue: la tagliò in strisce sottilissime per delimitare un intero colle."},
+  {era:'antichita', year:'V sec. a.C.', title:'Trecento, non solo trecento', text:"Alla battaglia delle Termopili, oltre ai celebri 300 spartani, combatterono anche migliaia di altri greci alleati, spesso dimenticati dalla narrazione popolare del mito."},
+  {era:'antichita', year:'II millennio a.C.', title:'Una scrittura mai decifrata del tutto', text:"La scrittura della Valle dell'Indo, usata dalla civiltà di Harappa oltre 4000 anni fa, non è ancora stata decifrata con certezza dagli studiosi moderni."},
+  {era:'antichita', year:'146 a.C.', title:'Il sale sparso su Cartagine', text:"Una leggenda tramandata da storici moderni vuole che i romani abbiano cosparso di sale le rovine di Cartagine dopo la sua distruzione: la pratica non è però confermata da fonti antiche coeve."},
+  {era:'antichita', year:'IV sec. a.C.', title:'Un impero costruito in 13 anni', text:"Alessandro Magno costruì uno dei più vasti imperi della storia in appena tredici anni di campagne militari, prima di morire a Babilonia a soli 32 anni."},
+  {era:'antichita', year:'V sec. a.C.', title:'La democrazia con esclusioni', text:"La democrazia ateniese escludeva dal voto donne, stranieri e schiavi, riducendo il corpo elettorale reale a una minoranza della popolazione della città."},
+  {era:'antichita', year:'753 a.C.', title:'Una data convenzionale', text:"La data tradizionale della fondazione di Roma, il 753 a.C., fu calcolata secoli dopo dallo storico Varrone e ha valore più simbolico che storicamente certo."},
+  {era:'antichita', year:'I sec. d.C.', title:'Un vulcano che conservò una città', text:"L'eruzione del Vesuvio del 79 d.C. distrusse Pompei, ma la coltre di cenere che la ricoprì ne conservò per secoli edifici, oggetti quotidiani e persino i calchi dei corpi delle vittime."},
+  {era:'antichita', year:'III sec. a.C.', title:'Un matematico e una vasca da bagno', text:"Secondo la tradizione, Archimede intuì il principio della spinta idrostatica mentre entrava in una vasca da bagno, correndo poi nudo per le strade di Siracusa gridando eureka."},
+  {era:'antichita', year:'IV sec. a.C.', title:'Una biblioteca ambulante', text:"Aristotele fondò il Liceo ad Atene, una scuola che comprendeva anche una delle prime raccolte sistematiche di testi scientifici e filosofici del mondo antico."},
+  {era:'antichita', year:'480 a.C.', title:'Una flotta decisiva', text:"La battaglia navale di Salamina del 480 a.C. vide la flotta greca, numericamente inferiore, sconfiggere quella persiana sfruttando la conoscenza dello stretto e delle correnti locali."},
+  {era:'antichita', year:'I sec. a.C.', title:'Un console diventato dittatore a vita', text:"Giulio Cesare si fece nominare dittatore a vita nel 44 a.C., pochi mesi prima di essere assassinato dai senatori che temevano la fine della repubblica romana."},
+  {era:'antichita', year:'VIII sec. a.C.', title:'Un poema tramandato oralmente', text:"L'Iliade e l'Odissea furono probabilmente tramandate oralmente per generazioni prima di essere messe per iscritto, il che spiega molte delle loro formule ripetute, utili alla memorizzazione."},
+  {era:'antichita', year:'IV sec. a.C.', title:'Un filosofo condannato a morte', text:"Socrate fu condannato a morte ad Atene con l'accusa di corrompere i giovani e non riconoscere gli dei della città, e scelse di bere la cicuta piuttosto che fuggire."},
+  {era:'antichita', year:'27 a.C.', title:'Un impero nato da una repubblica', text:"Augusto trasformò gradualmente la Repubblica romana in un impero, mantenendo formalmente le istituzioni repubblicane ma accentrando su di sé i poteri reali."},
+  {era:'antichita', year:'V sec. a.C.', title:'Un muro contro i persiani', text:"Dopo le guerre persiane, Atene costruì le Lunghe Mura per collegare la città al porto del Pireo, garantendo l'approvvigionamento anche durante un eventuale assedio via terra."},
+  {era:'antichita', year:'II sec. a.C.', title:'Un meccanismo avanzatissimo', text:"Il meccanismo di Anticitera, un dispositivo greco antico ritrovato in un relitto, è considerato un calcolatore astronomico analogico di straordinaria complessità per la sua epoca."},
+  {era:'antichita', year:'509 a.C.', title:'La cacciata di un re', text:"La tradizione romana fa coincidere la nascita della Repubblica con la cacciata dell'ultimo re, Tarquinio il Superbo, nel 509 a.C."},
+  {era:'antichita', year:'I sec. d.C.', title:'Un impero senza mappe precise', text:"Nonostante l'estensione dell'impero romano, la cartografia antica restava spesso imprecisa: le mappe servivano più a orientare i viaggiatori lungo le strade che a rappresentare fedelmente i territori."},
+  {era:'antichita', year:'776 a.C.', title:'Una tregua sacra', text:"Durante le antiche Olimpiadi veniva proclamata una tregua sacra tra le città greche in guerra, per permettere ad atleti e spettatori di raggiungere Olimpia in sicurezza."},
+
+  {era:'medioevo', year:'800', title:"Un'incoronazione a sorpresa", text:"Secondo alcune fonti medievali, Carlo Magno non sapeva che sarebbe stato incoronato imperatore dal papa durante la messa di Natale dell'800, anche se molti storici dubitano di questa versione."},
+  {era:'medioevo', year:'1066', title:'Una conquista raccontata a fili', text:"La conquista normanna dell'Inghilterra del 1066 è narrata nell'arazzo di Bayeux, un lungo ricamo che rappresenta gli eventi come un vero e proprio fumetto medievale."},
+  {era:'medioevo', year:'1206-1227', title:'Un impero nato dalla steppa', text:"Gengis Khan unificò le tribù mongole e costruì in pochi decenni il più vasto impero contiguo della storia, esteso dalla Cina all'Europa orientale."},
+  {era:'medioevo', year:'IX-X sec.', title:'Un califfato culla del sapere', text:"Durante il califfato abbaside, Baghdad ospitò la Casa della Saggezza, un centro di traduzione e studio che preservò e ampliò il sapere greco, persiano e indiano."},
+  {era:'medioevo', year:'1347', title:'Il contagio arrivato dal mare', text:"La peste nera raggiunse l'Europa nel 1347 attraverso navi genovesi arrivate a Messina con equipaggi già decimati dalla malattia, diffondendosi rapidamente lungo le rotte commerciali."},
+  {era:'medioevo', year:'1204', title:'Una crociata contro cristiani', text:"La quarta crociata, partita per liberare Gerusalemme, deviò e saccheggiò invece Costantinopoli nel 1204, indebolendo gravemente l'impero bizantino cristiano."},
+  {era:'medioevo', year:'1347-1351', title:'Un mondo del lavoro trasformato', text:"La forte riduzione della popolazione causata dalla peste nera aumentò il potere contrattuale dei lavoratori superstiti, contribuendo indirettamente al declino del sistema feudale in Europa."},
+  {era:'medioevo', year:'711', title:'Una conquista rapidissima', text:"Le forze omayyadi conquistarono la maggior parte della penisola iberica in pochi anni a partire dal 711, dando inizio a quasi otto secoli di presenza islamica in Spagna."},
+  {era:'medioevo', year:'1291', title:'La fine di un regno crociato', text:"La caduta di San Giovanni d'Acri nel 1291 segnò la fine degli stati crociati in Terrasanta, dopo quasi due secoli di presenza latina nella regione."},
+  {era:'medioevo', year:'1350 circa', title:'Occhiali prima della stampa', text:"Gli occhiali con lenti convesse furono inventati in Italia intorno alla fine del XIII secolo, oltre un secolo prima della diffusione della stampa a caratteri mobili."},
+  {era:'medioevo', year:'1215', title:'Un concilio che regolò la vita quotidiana', text:"Il Quarto Concilio Lateranense del 1215 impose regole dettagliate sulla vita religiosa dei fedeli, inclusa la confessione annuale obbligatoria."},
+  {era:'medioevo', year:'IX sec.', title:'Un regno diviso in tre', text:"Il trattato di Verdun dell'843 divise l'impero carolingio tra i nipoti di Carlo Magno, gettando le basi per i futuri confini di Francia, Germania e delle terre intermedie."},
+  {era:'medioevo', year:'1381', title:'Una rivolta contadina', text:"La rivolta dei contadini inglesi del 1381, guidata da Wat Tyler, nacque dal malcontento per le tasse imposte dopo la peste nera e portò migliaia di persone a marciare su Londra."},
+  {era:'medioevo', year:'1054-1204', title:'Un impero che resisteva da secoli', text:"L'impero bizantino sopravvisse per un millennio dopo la caduta dell'impero romano d'Occidente, preservando lingua greca, diritto romano e cultura classica."},
+  {era:'medioevo', year:'1347-1351', title:'Un dottore con il becco', text:"I medici della peste indossavano maschere a forma di becco riempite di erbe aromatiche, nella convinzione errata che i miasmi, ovvero l'aria cattiva, fossero la causa del contagio."},
+  {era:'medioevo', year:'1215-1250', title:'Un imperatore poliglotta', text:"Federico II di Svevia, soprannominato stupor mundi, parlava correntemente più lingue e fu mecenate di scienze, poesia e filosofia in un'epoca spesso considerata solo oscurantista."},
+  {era:'medioevo', year:'1000 circa', title:'Un anno mille senza panico globale', text:"Contrariamente a un mito diffuso in epoca moderna, non ci sono prove solide di un diffuso terrore collettivo per la fine del mondo in Europa nell'anno 1000."},
+  {era:'medioevo', year:'1347-1351', title:"Un'economia da ricostruire", text:"Dopo la peste nera, la drastica riduzione della manodopera contribuì paradossalmente a un miglioramento delle condizioni salariali per i contadini superstiti in molte regioni europee."},
+  {era:'medioevo', year:'732', title:"Una battaglia che fermò un'avanzata", text:"La battaglia di Poitiers del 732 vide le forze franche di Carlo Martello fermare l'avanzata islamica in Europa occidentale, un evento a lungo considerato uno spartiacque storico."},
+  {era:'medioevo', year:'1088-1150', title:'Studenti che assumevano i professori', text:"Nelle prime università come Bologna, erano gli studenti stessi, organizzati in corporazioni, a contrattare stipendi e regole con i propri insegnanti, invertendo il rapporto gerarchico moderno."},
+
+  {era:'rinascimento', year:'1440 circa', title:'Una rivoluzione silenziosa', text:"L'invenzione della stampa a caratteri mobili di Gutenberg permise, in pochi decenni, una diffusione dei testi impensabile prima, moltiplicando il numero di libri disponibili in Europa."},
+  {era:'rinascimento', year:'1508', title:'Un genio che scriveva liste della spesa', text:"I taccuini di Leonardo da Vinci mescolavano appunti di anatomia, ingegneria e arte a semplici liste della spesa e promemoria quotidiani, mostrando una mente in costante osservazione del mondo."},
+  {era:'rinascimento', year:'1508-1520', title:'Rivali sotto lo stesso cielo', text:"Raffaello e Michelangelo lavorarono contemporaneamente in Vaticano, l'uno alle Stanze e l'altro alla Cappella Sistina, in un clima di rivalità artistica che stimolò entrambi."},
+  {era:'rinascimento', year:'1440', title:'Una prospettiva calcolata', text:"Filippo Brunelleschi è considerato il padre della prospettiva lineare moderna, dimostrata con esperimenti ottici sulla piazza del Battistero di Firenze."},
+  {era:'rinascimento', year:'1494-1559', title:"Guerre per l'Italia", text:"Le guerre d'Italia videro le grandi potenze europee, in particolare Francia e Spagna, contendersi per decenni il controllo della penisola italiana, allora divisa in stati rivali."},
+  {era:'rinascimento', year:'1517', title:'Novantacinque tesi su una porta', text:"Martin Lutero affisse, secondo la tradizione, le sue 95 tesi sulla porta della chiesa di Wittenberg nel 1517, dando avvio alla Riforma protestante."},
+  {era:'rinascimento', year:'1519-1522', title:'Il primo giro del mondo', text:"La spedizione di Magellano completò la prima circumnavigazione del globo nel 1522, anche se lo stesso Magellano morì nelle Filippine prima della fine del viaggio."},
+  {era:'rinascimento', year:'1509-1511', title:'Una scuola dipinta', text:"L'affresco La Scuola di Atene di Raffaello raffigura filosofi antichi con i volti di artisti contemporanei, tra cui probabilmente lo stesso Michelangelo nei panni di Eraclito."},
+  {era:'rinascimento', year:'XVI sec.', title:'Il naso di Machiavelli', text:"Nonostante l'immagine spesso spietata associata al suo pensiero politico, Machiavelli scrisse anche commedie teatrali di successo, come La Mandragola."},
+  {era:'rinascimento', year:'1478', title:'Una congiura in una cattedrale', text:"La congiura dei Pazzi del 1478 tentò di assassinare Lorenzo e Giuliano de' Medici durante la messa nel Duomo di Firenze: Giuliano morì, Lorenzo sopravvisse e represse duramente i cospiratori."},
+  {era:'rinascimento', year:'1503-1506', title:'Un ritratto mai consegnato', text:"Leonardo lavorò alla Gioconda per anni e non la consegnò mai al committente originario, portandola con sé fino alla morte in Francia, dove oggi si trova al Louvre."},
+  {era:'rinascimento', year:'1545-1563', title:'Una risposta della Chiesa', text:"Il Concilio di Trento, riunito in più sessioni tra il 1545 e il 1563, fu la risposta della Chiesa cattolica alla Riforma protestante e ridefinì dottrina e disciplina ecclesiastica."},
+  {era:'rinascimento', year:'XV sec.', title:"Un'invenzione che salvò gli occhi", text:"La diffusione della stampa aumentò la domanda di occhiali da lettura, rendendo la correzione della vista un'esigenza sempre più comune tra studiosi e mercanti."},
+  {era:'rinascimento', year:'1533', title:'Una regina che portò la cucina italiana', text:"Caterina de' Medici, andando in sposa al futuro re di Francia, portò con sé cuochi fiorentini che secondo la tradizione influenzarono profondamente la cucina di corte francese."},
+  {era:'rinascimento', year:'1492-1503', title:'Un papa controverso', text:"Papa Alessandro VI, della famiglia Borgia, è ricordato dalla storiografia rinascimentale come uno dei pontefici più politicamente spregiudicati e discussi del suo tempo."},
+  {era:'rinascimento', year:'1543', title:'Un corpo umano finalmente disegnato', text:"Andrea Vesalio pubblicò nel 1543 il De humani corporis fabrica, un trattato di anatomia basato sulla dissezione diretta che corresse numerosi errori tramandati dall'antichità."},
+  {era:'rinascimento', year:'XVI sec.', title:"Un mercato dell'arte in crescita", text:"Nel Rinascimento nacque un vero e proprio mercato dell'arte, con botteghe che producevano opere anche su commissione di mercanti e famiglie borghesi, non solo di corti e chiese."},
+  {era:'rinascimento', year:'1454', title:'Una pace tra rivali', text:"La pace di Lodi del 1454 stabilì un equilibrio tra i principali stati italiani, garantendo decenni di relativa stabilità prima delle guerre d'Italia di fine secolo."},
+  {era:'rinascimento', year:'1508-1512', title:'Nove scene, un solo soffitto', text:"Il soffitto della Cappella Sistina racconta nove episodi della Genesi, dalla creazione del mondo al diluvio universale, distribuiti lungo l'intera volta della cappella."},
+  {era:'rinascimento', year:'XV-XVI sec.', title:'Una lingua che diventa standard', text:"Il fiorentino letterario, grazie soprattutto a Dante, Petrarca e Boccaccio, divenne nel Rinascimento la base per la lingua italiana standard, ancora prima dell'unità politica del paese."},
+  {era:'rinascimento', year:'1571', title:"L'ultima grande battaglia di galee", text:"La battaglia di Lepanto del 1571 fu una delle ultime grandi battaglie navali combattute principalmente con galee a remi, prima dell'avvento dei velieri armati."},
+
+  {era:'moderna', year:'1776', title:'Una dichiarazione firmata in ritardo', text:"La Dichiarazione d'Indipendenza americana fu approvata il 4 luglio 1776, ma la maggior parte dei delegati la firmò materialmente solo il mese successivo, il 2 agosto."},
+  {era:'moderna', year:'1789-1799', title:'Un decennio di cambiamenti', text:"La Rivoluzione Francese, tra il 1789 e il 1799, abolì la monarchia assoluta, introdusse nuovi sistemi di misura e ridisegnò profondamente la struttura sociale e politica del paese."},
+  {era:'moderna', year:'1799-1815', title:'Un codice più duraturo delle guerre', text:"Il Codice civile napoleonico del 1804 influenzò i sistemi legali di numerosi paesi europei ben oltre la caduta dell'impero napoleonico, restando in vigore, con modifiche, ancora oggi in Francia."},
+  {era:'moderna', year:'1600 circa', title:'Un cannocchiale puntato al cielo', text:"Galileo Galilei non inventò il cannocchiale, ma fu tra i primi a perfezionarlo e puntarlo sistematicamente verso il cielo, scoprendo i satelliti di Giove nel 1610."},
+  {era:'moderna', year:'1633', title:'Un processo alla scienza', text:"Galileo fu processato dall'Inquisizione nel 1633 per aver sostenuto il modello eliocentrico, ed fu costretto a un'abiura formale delle sue tesi per evitare condanne più gravi."},
+  {era:'moderna', year:'1687', title:"Tre leggi per l'universo", text:"Isaac Newton pubblicò nel 1687 i Philosophiae Naturalis Principia Mathematica, formulando le leggi del moto e della gravitazione universale che avrebbero dominato la fisica per due secoli."},
+  {era:'moderna', year:'1776', title:"Un'idea che cambiò l'economia", text:"Adam Smith pubblicò nel 1776 La ricchezza delle nazioni, gettando le basi teoriche del liberismo economico moderno proprio nello stesso anno dell'indipendenza americana."},
+  {era:'moderna', year:'1783', title:'I primi voli umani', text:"I fratelli Montgolfier realizzarono nel 1783 il primo volo umano documentato a bordo di una mongolfiera ad aria calda, davanti alla corte di Luigi XVI."},
+  {era:'moderna', year:'1804-1814', title:'Un impero durato un decennio', text:"L'impero napoleonico, proclamato nel 1804, arrivò a controllare gran parte dell'Europa continentale prima di crollare rapidamente dopo la disastrosa campagna di Russia del 1812."},
+  {era:'moderna', year:'1815', title:'Una sconfitta definitiva', text:"La battaglia di Waterloo del 1815 pose fine in modo definitivo alle ambizioni politiche di Napoleone, che fu esiliato sull'isola di Sant'Elena fino alla morte."},
+  {era:'moderna', year:'1776-1783', title:"Un aiuto decisivo dall'estero", text:"La Francia sostenne militarmente ed economicamente la rivoluzione americana contro la Gran Bretagna, un intervento che contribuì anche ad aggravare le finanze pubbliche francesi prima della propria rivoluzione."},
+  {era:'moderna', year:'1799', title:'Una pietra che svelò i geroglifici', text:"La scoperta della Stele di Rosetta nel 1799 fornì il testo bilingue che permise, decenni dopo, a Jean-François Champollion di decifrare la scrittura geroglifica egizia."},
+  {era:'moderna', year:'1712', title:"Una macchina che avviò un'epoca", text:"Il motore a vapore atmosferico di Thomas Newcomen, introdotto nel 1712, fu tra i primi impiegati su scala industriale per pompare acqua dalle miniere, aprendo la strada alla rivoluzione industriale."},
+  {era:'moderna', year:'1789', title:'Diritti dichiarati, non sempre applicati', text:"La Dichiarazione dei diritti dell'uomo e del cittadino del 1789 proclamava l'uguaglianza di tutti gli uomini, ma non si estendeva formalmente alle donne né aboliva subito la schiavitù nelle colonie."},
+  {era:'moderna', year:'1799-1802', title:'Un generale diventato console', text:"Napoleone Bonaparte prese il potere con il colpo di stato del 18 brumaio 1799, diventando Primo Console della Repubblica francese prima di proclamarsi imperatore nel 1804."},
+  {era:'moderna', year:'1791', title:'Una costituzione durata poco', text:"La costituzione francese del 1791, che istituiva una monarchia costituzionale, ebbe vita breve: già l'anno successivo la Francia fu proclamata repubblica."},
+  {era:'moderna', year:'1803', title:'Un territorio comprato a basso prezzo', text:"Gli Stati Uniti acquistarono dalla Francia, con l'acquisto della Louisiana del 1803, un territorio vastissimo a un prezzo relativamente contenuto, raddoppiando di fatto la superficie del paese."},
+  {era:'moderna', year:'1830-1848', title:'Ferrovie che cambiano le distanze', text:"La diffusione delle prime linee ferroviarie a partire dagli anni 1830 ridusse drasticamente i tempi di viaggio, trasformando percezione delle distanze e organizzazione del commercio."},
+  {era:'moderna', year:'1848', title:'Un anno di rivoluzioni diffuse', text:"Il 1848 vide sollevazioni rivoluzionarie quasi simultanee in molte capitali europee, spinte da richieste di costituzioni, unità nazionale e migliori condizioni sociali."},
+  {era:'moderna', year:'1776-1789', title:'Debiti che portarono a una rivoluzione', text:"Le enormi spese sostenute dalla Francia per sostenere la guerra d'indipendenza americana contribuirono alla crisi finanziaria che, pochi anni dopo, sfociò nella Rivoluzione Francese."},
+
+  {era:'contemporanea', year:'1876', title:"Un'invenzione contesa", text:"Alexander Graham Bell depositò il brevetto del telefono nel 1876, ma altri inventori, tra cui Antonio Meucci, avevano lavorato in precedenza a dispositivi simili, alimentando dispute storiche sulla paternità dell'invenzione."},
+  {era:'contemporanea', year:'1929', title:"Un giovedì che cambiò l'economia", text:"Il crollo di Wall Street del 1929, iniziato con il cosiddetto giovedì nero, innescò la Grande Depressione, la crisi economica più grave del ventesimo secolo nei paesi industrializzati."},
+  {era:'contemporanea', year:'1957', title:'Un fischio dallo spazio', text:"Lo Sputnik, lanciato dall'Unione Sovietica nel 1957, fu il primo satellite artificiale della storia e diede ufficialmente inizio alla corsa allo spazio tra le due superpotenze."},
+  {era:'contemporanea', year:'1945', title:"Un'arma che cambiò la guerra per sempre", text:"L'uso delle bombe atomiche su Hiroshima e Nagasaki nell'agosto 1945 accelerò la resa del Giappone e segnò l'inizio dell'era nucleare nella storia militare mondiale."},
+  {era:'contemporanea', year:'1961', title:'Un muro costruito in una notte', text:"La costruzione del Muro di Berlino iniziò nella notte tra il 12 e il 13 agosto 1961, dividendo improvvisamente famiglie e quartieri fino ad allora collegati."},
+  {era:'contemporanea', year:'1969', title:'Un piccolo passo', text:"Il 20 luglio 1969 Neil Armstrong divenne il primo essere umano a camminare sulla Luna, un evento seguito in diretta televisiva da centinaia di milioni di persone in tutto il mondo."},
+  {era:'contemporanea', year:'1918', title:"Un'influenza più letale della guerra", text:"La pandemia di influenza spagnola del 1918 causò più vittime della Prima Guerra Mondiale stessa, diffondendosi rapidamente proprio a causa degli spostamenti militari di fine conflitto."},
+  {era:'contemporanea', year:'1947', title:'Una linea tracciata in fretta', text:"La linea di confine tra India e Pakistan, tracciata nel 1947 in poche settimane da un funzionario britannico che non aveva mai visitato la regione, causò spostamenti di massa e violenze di enorme portata."},
+  {era:'contemporanea', year:'1948', title:'Una dichiarazione universale', text:"La Dichiarazione Universale dei Diritti dell'Uomo, approvata dalle Nazioni Unite nel 1948, nacque anche come risposta diretta agli orrori della Seconda Guerra Mondiale."},
+  {era:'contemporanea', year:'1962', title:"Tredici giorni sull'orlo del baratro", text:"La crisi dei missili di Cuba del 1962 portò il mondo pericolosamente vicino a un conflitto nucleare diretto tra Stati Uniti e Unione Sovietica, risolta dopo tredici giorni di tensione diplomatica."},
+  {era:'contemporanea', year:'1990', title:'Una rete che sostituì i cataloghi cartacei', text:"Il primo sito web pubblico, creato al CERN nel 1990-91, permetteva di navigare tra documenti collegati da link, un'idea che avrebbe rivoluzionato l'accesso all'informazione."},
+  {era:'contemporanea', year:'1994', title:'Un genocidio in cento giorni', text:"Il genocidio del Ruanda del 1994 causò centinaia di migliaia di morti in circa cento giorni, uno degli eventi più rapidi e devastanti della storia contemporanea."},
+  {era:'contemporanea', year:'2001', title:'Un giorno che cambiò la sicurezza globale', text:"Gli attentati dell'11 settembre 2001 negli Stati Uniti portarono a profondi cambiamenti nelle politiche di sicurezza internazionale e negli assetti geopolitici del decennio successivo."},
+  {era:'contemporanea', year:'1928', title:'Un voto atteso a lungo', text:"Nel Regno Unito, il diritto di voto fu esteso a tutte le donne maggiorenni solo nel 1928, dieci anni dopo un primo allargamento parziale limitato alle donne sopra i 30 anni."},
+  {era:'contemporanea', year:'1989-1991', title:'Un blocco che si dissolse rapidamente', text:"Tra il 1989 e il 1991 crollarono in rapida successione i regimi comunisti dell'Europa orientale, culminando con la dissoluzione dell'Unione Sovietica alla fine del 1991."},
+  {era:'contemporanea', year:'1953', title:'Una struttura a doppia elica', text:"La scoperta della struttura a doppia elica del DNA, pubblicata nel 1953 da Watson e Crick, si basò in modo determinante anche sui dati di diffrazione ai raggi X ottenuti da Rosalind Franklin."},
+  {era:'contemporanea', year:'1965', title:'Una legge che tolse un muro amministrativo', text:"L'Immigration and Nationality Act del 1965 abolì negli Stati Uniti il sistema di quote basato sull'origine nazionale, cambiando profondamente i flussi migratori verso il paese nei decenni successivi."},
+  {era:'contemporanea', year:'1986', title:'Un disastro che cambiò le norme di sicurezza', text:"L'incidente nucleare di Chernobyl del 1986 portò a una revisione globale degli standard di sicurezza degli impianti nucleari e lasciò una vasta area disabitata ancora oggi."},
+  {era:'contemporanea', year:'1979', title:'Una rivoluzione che cambiò gli equilibri regionali', text:"La rivoluzione iraniana del 1979 rovesciò la monarchia dello scià e instaurò una repubblica islamica, alterando profondamente gli equilibri geopolitici del Medio Oriente."},
+  {era:'contemporanea', year:'1998', title:'Un accordo per fermare un conflitto', text:"L'accordo del Venerdì Santo del 1998 pose fine a decenni di violento conflitto nell'Irlanda del Nord, noto come i Troubles, attraverso un complesso compromesso politico condiviso."}
+];
+
+// assign stable ids
+SEED_FACTS.forEach((f, i) => { f.id = 'f-' + (i + 1); });
+
+const SAVED_KEY = 'saved-ids';
+const HAS_STORAGE = (typeof window.storage !== 'undefined');
+const BATCH_SIZE = 15;
+
+function shuffleArray(arr){
+  for (let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Alterna le epoche a rotazione invece di affidarsi solo al caso: un mescolamento
+// puramente casuale può comunque produrre per caso lunghe sequenze della stessa epoca.
+function interleaveByEra(facts){
+  const buckets = {};
+  facts.forEach(f => {
+    if (!buckets[f.era]) buckets[f.era] = [];
+    buckets[f.era].push(f);
+  });
+  Object.values(buckets).forEach(shuffleArray);
+  const eraKeys = shuffleArray(Object.keys(buckets));
+  const result = [];
+  let remaining = true;
+  while (remaining){
+    remaining = false;
+    for (const era of eraKeys){
+      if (buckets[era] && buckets[era].length){
+        result.push(buckets[era].shift());
+        remaining = true;
+      }
+    }
+  }
+  return result;
+}
+
+// mescolate fin dall'inizio, con vera alternanza tra epoche: niente lunghe sequenze di fila
+let FACTS = interleaveByEra(SEED_FACTS.slice());
+let renderedCount = 0;
+const saved = new Set();
+
+// ---------- Wikipedia "accadde oggi" extension ----------
+// Estende l'archivio con eventi storici reali presi dall'API pubblica di Wikipedia
+// (licenza CC BY-SA). Se non è raggiungibile (offline, file aperto localmente, ecc.)
+// l'app continua a funzionare solo con le curiosità locali qui sopra.
+const WIKI_BASE = 'https://it.wikipedia.org/api/rest_v1/feed/onthisday/all/';
+let wikiEnabled = true;
+let wikiFetchInFlight = false;
+let wikiQueue = [];
+let wikiQueuePos = 0;
+
+function buildWikiQueue(){
+  const daysInMonth = [31,29,31,30,31,30,31,31,30,31,30,31]; // 29 per includere il 29 febbraio
+  const pairs = [];
+  for (let m = 1; m <= 12; m++){
+    for (let d = 1; d <= daysInMonth[m-1]; d++) pairs.push([m, d]);
+  }
+  return shuffleArray(pairs);
+}
+
+function mapYearToEra(year){
+  if (year < 500) return 'antichita';
+  if (year < 1450) return 'medioevo';
+  if (year < 1650) return 'rinascimento';
+  if (year < 1900) return 'moderna';
+  return 'contemporanea';
+}
+function formatWikiYear(year){
+  return year < 0 ? `${Math.abs(year)} a.C.` : String(year);
+}
+
+async function fetchWikiDay(month, day){
+  const mm = String(month).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  // niente header personalizzati qui: da browser farebbero scattare un preflight CORS
+  // che l'API pubblica di Wikipedia potrebbe non consentire, bloccando l'intera richiesta.
+  const res = await fetch(WIKI_BASE + mm + '/' + dd);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  const raw = [].concat(data.selected || [], data.events || []);
+  const seen = new Set();
+  const out = [];
+  raw.forEach((item, idx) => {
+    if (!item || !item.text || typeof item.year !== 'number') return;
+    const key = item.year + '|' + item.text.slice(0, 40);
+    if (seen.has(key)) return;
+    seen.add(key);
+    const page = (item.pages || []).find(p => p && p.title);
+    const title = page ? page.title.replace(/_/g, ' ') : (item.text.slice(0, 50).trim() + '…');
+    out.push({
+      id: 'wiki-' + mm + dd + '-' + item.year + '-' + idx,
+      era: mapYearToEra(item.year),
+      year: formatWikiYear(item.year),
+      title,
+      text: item.text,
+      source: 'wikipedia'
+    });
+  });
+  return out;
+}
+
+// Recupera altri giorni finché non aggiunge almeno "minNeeded" nuove voci,
+// oppure si ferma e si autodisabilita se l'API non è raggiungibile.
+async function topUpFromWikipedia(minNeeded){
+  let added = 0;
+  let attempts = 0;
+  const maxAttempts = 40; // limite di sicurezza: mai più di 40 giorni per singolo rifornimento
+  const newBatch = [];
+  try {
+    while (added < minNeeded && attempts < maxAttempts){
+      attempts++;
+      if (wikiQueuePos >= wikiQueue.length) wikiQueuePos = 0; // ricomincia il giro dell'anno
+      const [m, d] = wikiQueue[wikiQueuePos++];
+      const dayFacts = await fetchWikiDay(m, d);
+      if (dayFacts.length){
+        newBatch.push(...dayFacts);
+        added += dayFacts.length;
+      }
+    }
+  } catch (e) {
+    console.error('Wikipedia non raggiungibile, disattivo l\'estensione', e);
+    wikiEnabled = false;
+    showToast('Contenuti extra da Wikipedia non disponibili ora: continuo con l\'archivio locale');
+  }
+  if (newBatch.length){
+    FACTS = FACTS.concat(interleaveByEra(newBatch)); // alternanza vera anche qui, non solo casuale
+  }
+}
+
+const feed = document.getElementById('feed');
+const counterText = document.getElementById('counterText');
+const toast = document.getElementById('toast');
+const progressThumb = document.getElementById('progressThumb');
+
+function heartIcon(filled){
+  return filled
+    ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-10-9.3C.4 8.5 2 5 5.6 5 8 5 10 6.4 12 9c2-2.6 4-4 6.4-4C22 5 23.6 8.5 22 11.7 19.5 16.4 12 21 12 21z"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 21s-7.5-4.6-10-9.3C.4 8.5 2 5 5.6 5 8 5 10 6.4 12 9c2-2.6 4-4 6.4-4C22 5 23.6 8.5 22 11.7 19.5 16.4 12 21 12 21z"/></svg>';
+}
+const shareIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>';
+
+function showToast(msg){
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+function updateCounter(){
+  counterText.textContent = `${saved.size}/${FACTS.length} raccolte`;
+}
+
+function buildSlide(fact, i){
+  const slide = document.createElement('section');
+  slide.className = 'slide';
+  slide.dataset.id = fact.id;
+
+  const color = ERA_COLORS[fact.era] || '#8C7A54';
+  const eraLabel = ERA_LABELS[fact.era] || fact.era;
+  const catno = String(i + 1).padStart(4, '0');
+  const isSaved = saved.has(fact.id);
+  const fromWiki = fact.source === 'wikipedia';
+
+  slide.innerHTML = `
+    <div class="card" style="--tabtop:${ERA_TABTOP[fact.era] || 40}px">
+      <div class="tab" style="background:${color}">${eraLabel}</div>
+      <div class="head-row">
+        <span class="catno">N. ${catno}</span>
+        <span class="era-label">${eraLabel}</span>
+      </div>
+      <h2 class="title"></h2>
+      <p class="body-text"></p>
+      ${fromWiki ? `<div class="wiki-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span>Fonte: Wikipedia, CC BY-SA</span></div>` : ''}
+      <div class="foot-row">
+        <span class="year"></span>
+        <div class="actions">
+          <button class="actionbtn save${isSaved ? ' active' : ''}" data-id="${fact.id}">${heartIcon(isSaved)}<span>${isSaved ? 'salvata' : 'salva'}</span></button>
+          <button class="actionbtn share" data-id="${fact.id}">${shareIcon}<span>condividi</span></button>
+        </div>
+      </div>
+    </div>
+    ${i === 0 ? '<div class="hint">scorri per scoprire ↑</div>' : ''}
+  `;
+  slide.querySelector('.title').textContent = fact.title;
+  slide.querySelector('.body-text').textContent = fact.text;
+  slide.querySelector('.year').textContent = fact.year;
+  return slide;
+}
+
+// fade-in + progress bar color, tracks whichever card is centered
+const viewObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting && entry.intersectionRatio > 0.6){
+      entry.target.classList.add('in-view');
+      const fact = FACTS.find(f => f.id === entry.target.dataset.id);
+      if (fact && progressThumb) progressThumb.style.background = ERA_COLORS[fact.era] || '#8C7A54';
+      const hintEl = document.querySelector('.hint');
+      if (hintEl && entry.target.dataset.id !== FACTS[0].id){
+        hintEl.style.opacity = '0';
+      }
+    }
+  });
+}, { threshold: [0, 0.6] });
+
+// infinite-scroll style batch loading: renders more cards as the user approaches the end
+let sentinel = null;
+const loadMoreObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => { if (entry.isIntersecting) renderNextBatch(); });
+}, { rootMargin: '1200px 0px' });
+
+function renderNextBatch(){
+  const start = renderedCount;
+  const end = Math.min(FACTS.length, start + BATCH_SIZE);
+  const justRendered = end - start;
+
+  for (let i = start; i < end; i++){
+    const slide = buildSlide(FACTS[i], i);
+    feed.appendChild(slide);
+    viewObserver.observe(slide);
+  }
+  renderedCount = end;
+  updateCounter();
+
+  const remaining = FACTS.length - renderedCount;
+  if (wikiEnabled && remaining < BATCH_SIZE * 3 && !wikiFetchInFlight){
+    wikiFetchInFlight = true;
+    topUpFromWikipedia(BATCH_SIZE * 4).finally(() => {
+      wikiFetchInFlight = false;
+      renderNextBatch(); // riprende da dove era rimasto, ora che ci sono nuove schede (se sono arrivate)
+    });
+  }
+
+  if (sentinel){ loadMoreObserver.unobserve(sentinel); sentinel = null; }
+  // riosserva solo se abbiamo davvero aggiunto schede e non c'è già un fetch in corso:
+  // se c'è un fetch in corso, sarà il suo .finally() a richiamare renderNextBatch quando pronto
+  if (justRendered > 0 && !wikiFetchInFlight && feed.lastElementChild){
+    sentinel = feed.lastElementChild;
+    loadMoreObserver.observe(sentinel);
+  }
+}
+
+function updateProgressOnScroll(){
+  const track = document.getElementById('progressTrack');
+  if (!track || !progressThumb) return;
+  const trackH = track.clientHeight - progressThumb.clientHeight;
+  const max = feed.scrollHeight - feed.clientHeight;
+  const frac = max > 0 ? feed.scrollTop / max : 0;
+  progressThumb.style.top = Math.min(trackH, Math.max(0, frac * trackH)) + 'px';
+}
+let scrollTicking = false;
+feed.addEventListener('scroll', () => {
+  if (!scrollTicking){
+    requestAnimationFrame(() => { updateProgressOnScroll(); scrollTicking = false; });
+    scrollTicking = true;
+  }
+});
+
+// ---------- barra laterale trascinabile: scorrimento rapido su/giù, anche fino in fondo ----------
+const progressTrackEl = document.getElementById('progressTrack');
+let isDraggingProgress = false;
+
+function jumpFeedToPointer(clientY){
+  const rect = progressTrackEl.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+  const max = feed.scrollHeight - feed.clientHeight;
+  feed.scrollTop = frac * max;
+}
+
+progressTrackEl.addEventListener('pointerdown', (e) => {
+  isDraggingProgress = true;
+  progressTrackEl.classList.add('dragging');
+  feed.style.scrollSnapType = 'none'; // niente "scatti" mentre si trascina
+  try { progressTrackEl.setPointerCapture(e.pointerId); } catch(err){}
+  jumpFeedToPointer(e.clientY);
+  e.preventDefault();
+});
+progressTrackEl.addEventListener('pointermove', (e) => {
+  if (!isDraggingProgress) return;
+  jumpFeedToPointer(e.clientY);
+});
+function endProgressDrag(e){
+  if (!isDraggingProgress) return;
+  isDraggingProgress = false;
+  progressTrackEl.classList.remove('dragging');
+  feed.style.scrollSnapType = '';
+  try { progressTrackEl.releasePointerCapture(e.pointerId); } catch(err){}
+}
+progressTrackEl.addEventListener('pointerup', endProgressDrag);
+progressTrackEl.addEventListener('pointercancel', endProgressDrag);
+
+async function loadSaved(){
+  if (!HAS_STORAGE) return;
+  try {
+    const result = await window.storage.get(SAVED_KEY, false);
+    if (result && result.value){
+      const ids = JSON.parse(result.value);
+      if (Array.isArray(ids)) ids.forEach(id => saved.add(id));
+    }
+  } catch (e) {
+    // nessun preferito salvato in precedenza
+  }
+}
+async function persistSaved(){
+  if (!HAS_STORAGE) return;
+  try {
+    await window.storage.set(SAVED_KEY, JSON.stringify(Array.from(saved)), false);
+  } catch (e) {
+    console.error('Errore nel salvataggio dei preferiti', e);
+  }
+}
+
+feed.addEventListener('click', (e) => {
+  const saveBtn = e.target.closest('.save');
+  const shareBtn = e.target.closest('.share');
+
+  if (saveBtn){
+    const id = saveBtn.dataset.id;
+    if (saved.has(id)){
+      saved.delete(id);
+      saveBtn.classList.remove('active');
+      saveBtn.innerHTML = heartIcon(false) + '<span>salva</span>';
+    } else {
+      saved.add(id);
+      saveBtn.classList.add('active');
+      saveBtn.innerHTML = heartIcon(true) + '<span>salvata</span>';
+    }
+    updateCounter();
+    persistSaved();
+  }
+
+  if (shareBtn){
+    const id = shareBtn.dataset.id;
+    const fact = FACTS.find(f => f.id === id);
+    if (!fact) return;
+    const text = `${fact.title} (${fact.year}) — ${fact.text}`;
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text)
+        .then(() => showToast('Copiato negli appunti'))
+        .catch(() => showToast('Impossibile copiare'));
+    } else {
+      showToast('Copia non disponibile');
+    }
+  }
+});
+
+// ---------- init ----------
+(async function init(){
+  wikiQueue = buildWikiQueue();
+
+  if (location.protocol === 'file:'){
+    // da file:// molti browser bloccano le richieste verso altri domini per motivi di sicurezza:
+    // niente tentativi falliti silenziosi, meglio dirlo chiaramente da subito.
+    wikiEnabled = false;
+    setTimeout(() => showToast('Wikipedia extra richiede di aprire la pagina da un indirizzo web (non da file locale)'), 900);
+  }
+
+  await loadSaved();
+  updateCounter();
+  renderNextBatch();
+
+  if ('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(() => {
+      // non blocca l'app: continua a funzionare, solo senza le funzionalità offline avanzate
+    });
+  }
+})();
+</script>
+</body>
+</html>
